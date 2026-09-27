@@ -29,6 +29,7 @@ test('API uses public allowlist, common envelope, safe review writes, and single
     const origin='http://127.0.0.1:'+server.address().port;
     try{
         await Promise.all([controller.runDiscovery(),controller.runDiscovery()]);assert.equal(calls,1);
+        assert.equal((await fetch(origin+'/healthz')).status,200);
         const data=await (await fetch(origin+'/api/activities')).json();assert.equal(data.source,'live');assert.equal(data.activities[0].evidenceState,'confirmed');
         for(const filename of ['/.env','/db.js','/monitor.db','/package.json','/pipeline.js'])assert.equal((await fetch(origin+filename)).status,404);
         const review=await (await fetch(origin+'/api/review')).json();assert.equal(review.items.length,2);

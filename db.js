@@ -130,5 +130,5 @@ function cleanup(days = 30) {
     })();
 }
 function close() { if (db) { db.close(); db = null; } }
-module.exports = { init, close, getState, setState, storeCycle, getTrend, getAlerts, reviewQueue, saveLabel, exportLabels,
+module.exports = { init, connection:()=>db, close, getState, setState, storeCycle, getTrend, getAlerts, reviewQueue, saveLabel, exportLabels,
     reviewStats, recordModel, recordShadow, shadowReport, getCachedGeocode, setCachedGeocode, getStats, cleanup, CATEGORIES };

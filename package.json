@@ -1,7 +1,7 @@
 {
-  "name": "global-activity-monitor",
+  "name": "korean-issue-monitor",
   "version": "5.0.0",
-  "description": "Evidence-backed news monitor with provisional severity and reviewed local classification",
+  "description": "Korean internet issue search and monitoring dashboard",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

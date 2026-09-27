@@ -15,6 +15,7 @@ const { fetchAllNews } = require('./feeds');
 const { THEME_GROUPS, buildGeoQuery, buildDocQuery, parseGeoResponse, parseDocResponse } = require('./discovery');
 const { runPipeline, advanceAlerts, VERSION, WINDOW_MS, classify, normalizeArticle } = require('./pipeline');
 const db = require('./db');
+const korean = require('./korean');
 const { geocodePlace, isEnabled: geocodingEnabled } = require('./geocoding');
 const { loadModel, predict, promotionAllowed } = require('./model');
 const PASSWORD = process.env.AUTH_PASSWORD || '';
@@ -83,13 +84,26 @@ function createApp({ fetchGdeltImpl = fetchGdelt, fetchNewsImpl = fetchAllNews, 
     const app = express();
     app.disable('x-powered-by');
     app.use((req,res,next) => {
-        if (req.path === '/api/health' || authenticated(req)) return next();
+        if (req.path === '/healthz' || req.path === '/api/health' || authenticated(req)) return next();
         res.set('WWW-Authenticate','Basic realm="Monitor"').status(401).send('Authentication required');
     });
     app.use(express.json({ limit:'32kb' }));
     // Explicit public allowlist: no .env, database, source files, or model artifacts.
-    app.get('/', (_,res) => res.sendFile(path.join(__dirname,'index.html')));
+    app.get('/', (_,res) => res.sendFile(path.join(__dirname,'public/korean.html')));
+    app.get('/global', (_,res) => res.sendFile(path.join(__dirname,'index.html')));
     app.use('/assets',express.static(path.join(__dirname,'public'), { dotfiles:'deny', index:false }));
+    const koreanService = korean.createService(db.connection() || db.init());
+    const koreanWrite = (req,res,next) => {
+        if (!localRequest(req) && !PASSWORD) return res.status(403).json({error:'Authentication required for collection'});
+        const origin=req.headers.origin;
+        if (origin && origin !== `${req.protocol}://${req.get('host')}`) return res.status(403).json({error:'Cross-origin writes are disabled'});
+        next();
+    };
+    app.get('/api/kr/items',(req,res)=>res.json({items:koreanService.items({limit:positive(req.query.limit,100,500),query:String(req.query.q||'').slice(0,100),source:String(req.query.source||''),window:korean.WINDOWS[req.query.window]?req.query.window:'7d'})}));
+    app.get('/api/kr/issues',(req,res)=>res.json({issues:koreanService.issues(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
+    app.get('/api/kr/operations',(_,res)=>res.json(koreanService.operations()));
+    app.get('/healthz',(_,res)=>{try{db.connection().prepare('SELECT 1').get();res.json({status:'ok'});}catch{res.status(503).json({status:'unavailable'});}});
+    app.post('/api/kr/search',koreanWrite,async(req,res,next)=>{try{res.json(await koreanService.run(req.body));}catch(error){next(error);}});
     const reviewAccess = (req,res,next) => {
         if (!localRequest(req) && !PASSWORD) return res.status(403).json({ error:'Review access requires localhost or authentication' });
         if (req.method !== 'GET') {
@@ -197,7 +211,7 @@ function createApp({ fetchGdeltImpl = fetchGdelt, fetchNewsImpl = fetchAllNews, 
     app.post('/api/review/:id',reviewAccess,(req,res,next) => { try { res.json(db.saveLabel(req.params.id,req.body.label,req.body.revision)); } catch(error) { next(error); } });
     app.get('/api/model/shadow',reviewAccess,(_,res) => res.json({model:model?.hash || null,rows:model ? db.shadowReport(model.hash) : []}));
     app.use((error,req,res,next) => { res.status(error.status || 500).json({error:error.status ? error.message : 'Internal error'}); });
-    return { app, runDiscovery, refreshNews, envelope, attachWebSocket(server) {
+    return { app, koreanService, runDiscovery, refreshNews, envelope, attachWebSocket(server) {
         wss = new WebSocketServer({noServer:true});
         server.on('upgrade',(req,socket,head) => {
             const origin = req.headers.origin;
@@ -208,13 +222,19 @@ function createApp({ fetchGdeltImpl = fetchGdelt, fetchNewsImpl = fetchAllNews, 
     }, close() { if (wss) { for (const c of wss.clients) c.terminate(); wss.close(); } } };
 }
 async function start() {
-    db.init();
+    if (!PASSWORD && !['127.0.0.1','::1','localhost'].includes(HOST)) throw new Error('AUTH_PASSWORD is required for non-local binding');
+    const databasePath = path.resolve(process.env.DB_PATH || path.join(__dirname,'monitor.db'));
+    fs.mkdirSync(path.dirname(databasePath),{recursive:true});
+    db.init(databasePath);
     const controller = createApp(), server = http.createServer(controller.app);
     controller.attachWebSocket(server);
     server.listen(PORT,HOST,() => console.log(`Monitor ${VERSION}: http://${HOST}:${PORT}`));
-    const timers = [setInterval(controller.runDiscovery,10*60000),setInterval(controller.refreshNews,5*60000),setInterval(() => db.cleanup(30),24*60*60000)];
-    await controller.refreshNews();
-    controller.runDiscovery();
+    const koreanService = controller.koreanService;
+    const topics = (process.env.KOREAN_WATCH_QUERIES || '').split(',').map(x=>x.trim()).filter(Boolean);
+    let topicIndex = 0;
+    const collectTopic = async () => { if (!topics.length) return; try { await koreanService.run({query:topics[topicIndex++ % topics.length],window:'24h',sources:['news']}); } catch(error) { console.error('[korean]',error.message); } };
+    const timers = [setInterval(collectTopic,15*60000),setInterval(() => db.cleanup(30),24*60*60000)];
+    collectTopic();
     const stop = () => { timers.forEach(clearInterval); controller.close(); server.close(() => { db.close(); process.exit(0); }); setTimeout(() => process.exit(0),5000).unref(); };
     process.once('SIGINT',stop); process.once('SIGTERM',stop);
 }
