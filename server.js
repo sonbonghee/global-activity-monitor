@@ -103,8 +103,11 @@ function createApp({ fetchGdeltImpl = fetchGdelt, fetchNewsImpl = fetchAllNews, 
     };
     app.get('/api/kr/items',(req,res)=>res.json({items:koreanService.items({limit:positive(req.query.limit,100,500),query:String(req.query.q||'').slice(0,100),source:String(req.query.source||''),window:korean.WINDOWS[req.query.window]?req.query.window:'7d'})}));
     app.get('/api/kr/issues',(req,res)=>res.json({issues:koreanService.issues(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
+    app.get('/api/kr/clusters',(req,res)=>res.json({clusters:koreanService.events(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
     app.get('/api/kr/activities',(req,res)=>res.json({activities:koreanService.activities(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
     app.get('/api/kr/operations',(_,res)=>res.json(koreanService.operations()));
+    app.get('/api/kr/issues/:keyword/history',(req,res)=>res.json({points:koreanService.history(req.params.keyword,korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
+    app.post('/api/kr/issues/:keyword/review',koreanWrite,(req,res,next)=>{try{res.json(koreanService.review(req.params.keyword,req.body.decision,req.body.note));}catch(error){next(error);}});
     app.get('/healthz',(_,res)=>{try{db.connection().prepare('SELECT 1').get();res.json({status:'ok'});}catch{res.status(503).json({status:'unavailable'});}});
     app.post('/api/kr/search',koreanWrite,async(req,res,next)=>{try{res.json(await koreanService.run(req.body));}catch(error){next(error);}});
     const reviewAccess = (req,res,next) => {
@@ -237,8 +240,10 @@ async function start() {
     const topics = (configuredTopics === 'off' ? '' : configuredTopics?.trim() || '한국,서울,부산,재난,경제').split(',').map(x=>x.trim()).filter(Boolean);
     let topicIndex = 0;
     const collectTopic = async () => { if (!topics.length) return; try { await koreanService.run({query:topics[topicIndex++ % topics.length],window:'24h',sources:['news']}); } catch(error) { console.error('[korean]',error.message); } };
-    const timers = [setInterval(collectTopic,15*60000),setInterval(() => db.cleanup(30),24*60*60000)];
+    const collectTrends = async () => { try { await koreanService.run({query:'',window:'24h',sources:['trends']}); } catch(error) { console.error('[trends]',error.message); } };
+    const timers = [setInterval(collectTopic,15*60000),setInterval(collectTrends,60*60000),setInterval(() => { db.cleanup(30); koreanService.cleanup(30); },24*60*60000)];
     collectTopic();
+    setTimeout(collectTrends,10000).unref();
     const stop = () => { timers.forEach(clearInterval); controller.close(); server.close(() => { db.close(); process.exit(0); }); setTimeout(() => process.exit(0),5000).unref(); };
     process.once('SIGINT',stop); process.once('SIGTERM',stop);
 }

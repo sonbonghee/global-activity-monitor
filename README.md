@@ -1,3 +1,9 @@
+# 현재 기본 화면: 한국 인터넷 이슈 모니터
+
+이 저장소의 `/`는 한국어 뉴스·유튜브·Google 트렌드·선택형 X 수집을 위한 대시보드입니다. 실행 방법과 기능은 [KOREAN_MONITOR.md](KOREAN_MONITOR.md), Coolify 배포 설정은 [COOLIFY.md](COOLIFY.md)를 보세요. 아래 문서는 `/global`에 남아 있는 기존 세계 모니터의 설명입니다.
+
+---
+
 # Global Activity Monitor
 
 ## v5 evidence pipeline
