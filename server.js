@@ -83,6 +83,8 @@ async function fetchGdelt() {
 function createApp({ fetchGdeltImpl = fetchGdelt, fetchNewsImpl = fetchAllNews, now = () => new Date().toISOString() } = {}) {
     const app = express();
     app.disable('x-powered-by');
+    // Coolify terminates TLS at its reverse proxy; req.protocol must reflect the public URL.
+    app.set('trust proxy', 1);
     app.use((req,res,next) => {
         if (req.path === '/healthz' || req.path === '/api/health' || authenticated(req)) return next();
         res.set('WWW-Authenticate','Basic realm="Monitor"').status(401).send('Authentication required');
@@ -101,6 +103,7 @@ function createApp({ fetchGdeltImpl = fetchGdelt, fetchNewsImpl = fetchAllNews, 
     };
     app.get('/api/kr/items',(req,res)=>res.json({items:koreanService.items({limit:positive(req.query.limit,100,500),query:String(req.query.q||'').slice(0,100),source:String(req.query.source||''),window:korean.WINDOWS[req.query.window]?req.query.window:'7d'})}));
     app.get('/api/kr/issues',(req,res)=>res.json({issues:koreanService.issues(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
+    app.get('/api/kr/activities',(req,res)=>res.json({activities:koreanService.activities(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
     app.get('/api/kr/operations',(_,res)=>res.json(koreanService.operations()));
     app.get('/healthz',(_,res)=>{try{db.connection().prepare('SELECT 1').get();res.json({status:'ok'});}catch{res.status(503).json({status:'unavailable'});}});
     app.post('/api/kr/search',koreanWrite,async(req,res,next)=>{try{res.json(await koreanService.run(req.body));}catch(error){next(error);}});
@@ -230,7 +233,8 @@ async function start() {
     controller.attachWebSocket(server);
     server.listen(PORT,HOST,() => console.log(`Monitor ${VERSION}: http://${HOST}:${PORT}`));
     const koreanService = controller.koreanService;
-    const topics = (process.env.KOREAN_WATCH_QUERIES || '').split(',').map(x=>x.trim()).filter(Boolean);
+    const configuredTopics = process.env.KOREAN_WATCH_QUERIES;
+    const topics = (configuredTopics === 'off' ? '' : configuredTopics?.trim() || '한국,서울,부산,재난,경제').split(',').map(x=>x.trim()).filter(Boolean);
     let topicIndex = 0;
     const collectTopic = async () => { if (!topics.length) return; try { await koreanService.run({query:topics[topicIndex++ % topics.length],window:'24h',sources:['news']}); } catch(error) { console.error('[korean]',error.message); } };
     const timers = [setInterval(collectTopic,15*60000),setInterval(() => db.cleanup(30),24*60*60000)];
