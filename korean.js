@@ -77,6 +77,11 @@ function init(db){
     CREATE TABLE IF NOT EXISTS korean_reviews(keyword TEXT PRIMARY KEY,decision TEXT NOT NULL,note TEXT NOT NULL,reviewed_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS korean_items_seen ON korean_items(last_seen);
     CREATE INDEX IF NOT EXISTS korean_issue_history ON korean_issue_snapshots(keyword,window,captured_at);`);
+  const legacyTrends=db.prepare("SELECT id,data,first_seen,last_seen FROM korean_items WHERE json_extract(data,'$.source')='Google 트렌드'").all();
+  const insertItem=db.prepare('INSERT OR IGNORE INTO korean_items(id,data,first_seen,last_seen) VALUES(?,?,?,?)');
+  const insertSource=db.prepare('INSERT OR IGNORE INTO korean_source_items(id,source,data,collected_at) SELECT ?,source,data,collected_at FROM korean_source_items WHERE id=?');
+  const insertJobs=db.prepare('INSERT OR IGNORE INTO korean_job_items(job_id,item_id) SELECT job_id,? FROM korean_job_items WHERE item_id=?');
+  db.transaction(()=>{for(const row of legacyTrends){const item=JSON.parse(row.data),updated=normalized(item);if(!updated||updated.id===row.id)continue;insertItem.run(updated.id,JSON.stringify({...item,id:updated.id}),row.first_seen,row.last_seen);insertSource.run(updated.id,row.id);insertJobs.run(updated.id,row.id);db.prepare('DELETE FROM korean_job_items WHERE item_id=?').run(row.id);db.prepare('DELETE FROM korean_source_items WHERE id=?').run(row.id);db.prepare('DELETE FROM korean_items WHERE id=?').run(row.id);}})();
 }
 function createService(db,{searchNews=newsSearch,searchYouTube=youtubeSearch,searchTrends=trendsSearch,searchX=xSearch,now=()=>new Date(),youtubeKey=process.env.YOUTUBE_API_KEY||'',xToken=process.env.X_BEARER_TOKEN||'',dailyBudget=Math.max(1,Number(process.env.YOUTUBE_DAILY_SEARCH_LIMIT)||100)}={}){
   init(db);
