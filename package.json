@@ -7,6 +7,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "cleanup": "node -e \"require('./db').init(); require('./db').cleanup(30); require('./db').close();\"",
+    "backup": "node scripts/backup.js",
     "test": "node --test tests/*.test.js",
     "replay": "node scripts/replay.js",
     "review:freeze": "node scripts/freeze-review.js",

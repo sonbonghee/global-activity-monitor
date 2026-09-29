@@ -109,6 +109,7 @@ function createApp({ fetchGdeltImpl = fetchGdelt, fetchNewsImpl = fetchAllNews, 
         next();
     };
     app.get('/api/kr/items',(req,res)=>res.json({items:koreanService.items({limit:positive(req.query.limit,100,500),query:String(req.query.q||'').slice(0,100),source:String(req.query.source||''),window:korean.WINDOWS[req.query.window]?req.query.window:'7d'})}));
+    app.get('/api/kr/jobs/:id/items',(req,res)=>res.json({items:koreanService.jobItems(positive(req.params.id,0,Number.MAX_SAFE_INTEGER),positive(req.query.limit,200,500))}));
     app.get('/api/kr/issues',(req,res)=>res.json({issues:koreanService.issues(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
     app.get('/api/kr/clusters',(req,res)=>res.json({clusters:koreanService.events(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
     app.get('/api/kr/activities',(req,res)=>res.json({activities:koreanService.activities(korean.WINDOWS[req.query.window]?req.query.window:'24h')}));
@@ -255,12 +256,14 @@ async function start() {
     const configuredTopics = process.env.KOREAN_WATCH_QUERIES;
     const topics = (configuredTopics === 'off' ? '' : configuredTopics?.trim() || '한국,서울,부산,재난,경제').split(',').map(x=>x.trim()).filter(Boolean);
     let topicIndex = 0;
-    const collectTopic = async () => { if (!topics.length) return; try { await koreanService.run({query:topics[topicIndex++ % topics.length],window:'24h',sources:['news']}); } catch(error) { console.error('[korean]',error.message); } };
-    const collectTrends = async () => { try { await koreanService.run({query:'',window:'24h',sources:['trends']}); } catch(error) { console.error('[trends]',error.message); } };
-    const timers = [setInterval(collectTopic,15*60000),setInterval(collectTrends,60*60000),setInterval(controller.runDiscovery,10*60000),setInterval(controller.refreshNews,5*60000),setInterval(() => { db.cleanup(30); koreanService.cleanup(30); },24*60*60000)];
-    collectTopic();
+    const collectTopic = async () => { if (!topics.length) return; try { await koreanService.runWhenIdle({query:topics[topicIndex++ % topics.length],window:'24h',sources:['news']}); } catch(error) { console.error('[korean]',error.message); } };
+    const collectTrends = async () => { try { await koreanService.runWhenIdle({query:'',window:'24h',sources:['trends']}); } catch(error) { console.error('[trends]',error.message); } };
+    let collectionQueue = Promise.resolve();
+    const scheduleCollection = task => { collectionQueue = collectionQueue.then(task,task); return collectionQueue; };
+    const timers = [setInterval(() => scheduleCollection(collectTopic),15*60000),setInterval(() => scheduleCollection(collectTrends),60*60000),setInterval(controller.runDiscovery,10*60000),setInterval(controller.refreshNews,5*60000),setInterval(() => { db.cleanup(30); koreanService.cleanup(30); },24*60*60000)];
+    scheduleCollection(collectTopic);
     controller.refreshNews().then(controller.runDiscovery).catch(error => console.error('[global]',error.message));
-    setTimeout(collectTrends,10000).unref();
+    scheduleCollection(collectTrends);
     const stop = () => { timers.forEach(clearInterval); controller.close(); server.close(() => { db.close(); process.exit(0); }); setTimeout(() => process.exit(0),5000).unref(); };
     process.once('SIGINT',stop); process.once('SIGTERM',stop);
 }
