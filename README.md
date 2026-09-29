@@ -1,6 +1,17 @@
 # 현재 기본 화면: 한국 인터넷 이슈 모니터
 
-이 저장소의 `/`는 한국어 뉴스·유튜브·Google 트렌드·선택형 X 수집을 위한 대시보드입니다. 실행 방법과 기능은 [KOREAN_MONITOR.md](KOREAN_MONITOR.md), Coolify 배포 설정은 [COOLIFY.md](COOLIFY.md)를 보세요. 아래 문서는 `/global`에 남아 있는 기존 세계 모니터의 설명입니다.
+이 저장소의 `/`는 한국어 뉴스·유튜브·Google 트렌드·선택형 X 수집을 위한 대시보드입니다. 키워드별 원문을 수집하고, 최근 1시간·24시간·7일의 이슈 후보와 사건 묶음을 보여줍니다. `/global`에는 기존 세계 모니터가 남아 있습니다.
+
+## 빠른 시작
+
+```sh
+npm ci
+npm start
+```
+
+로컬에서는 `http://127.0.0.1:4000/`을 엽니다. YouTube 검색은 `YOUTUBE_API_KEY`, X 검색은 `X_BEARER_TOKEN`이 있을 때 사용할 수 있습니다. 설정 항목은 [.env.example](.env.example), 기능과 제약은 [KOREAN_MONITOR.md](KOREAN_MONITOR.md), Coolify 배포와 백업 절차는 [COOLIFY.md](COOLIFY.md)를 참고하세요. 공개 주소로 운영할 때는 `AUTH_PASSWORD`와 영구 저장소를 설정해야 합니다.
+
+아래 문서는 `/global`에 남아 있는 기존 세계 모니터의 설명입니다.
 
 ---
 
