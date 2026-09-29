@@ -1,6 +1,6 @@
 # Coolify 배포
 
-Git 저장소의 **Dockerfile** 빌드 방식으로 단일 애플리케이션을 만듭니다. 내부 포트(Ports Exposes)는 `4000`입니다. Dockerfile이 `0.0.0.0`에서 서버를 실행하고 `/healthz`를 상태 점검합니다.
+Git 저장소 `https://github.com/sonbonghee/global-activity-monitor`의 **Dockerfile** 빌드 방식으로 단일 애플리케이션을 만듭니다. `sonbonghee/onist_deeptrace`는 별도의 Python 프로젝트이므로 이 모니터의 배포 소스로 사용하지 않습니다. 내부 포트(Ports Exposes)는 `4000`입니다. Dockerfile이 `0.0.0.0`에서 서버를 실행하고 `/healthz`를 상태 점검합니다.
 
 ## 필수 설정
 
@@ -15,4 +15,8 @@ Coolify의 애플리케이션 상태 점검을 별도로 설정한다면 경로 
 
 배포 후 `/healthz`가 `{"status":"ok"}`를 반환하는지 확인하고 로그인 후 `/`에서 수집을 실행하세요. SQLite는 단일 컨테이너 운영을 전제로 합니다. 복제본을 여러 개 실행하거나 서로 다른 서버에서 같은 볼륨을 공유하지 마세요. 정기 백업은 `/app/data` 볼륨 전체를 대상으로 하며, 실행 중 파일 복사 대신 SQLite 온라인 백업을 사용하세요. 컨테이너 재시작과 재배포 후에도 데이터가 남는지 확인하세요.
 
-기존 세계 모니터는 `/global`에 남아 있으나, 이 배포의 자동 작업은 한국어 뉴스 감시어 수집만 실행합니다. `/`는 시간별 이슈 후보, 사건 묶음, 수집 결과와 운영 상태를 보여줍니다.
+기존 세계 모니터는 `/global`에서 뉴스 RSS를 5분마다, 세계 사건 분석을 10분마다 갱신합니다. 뉴스 RSS 수집 직후 잠정 이슈를 먼저 표시하고, GDELT 분석이 끝나면 다시 갱신합니다. GDELT가 연속 3회 실패하면 그 주기의 나머지 호출을 건너뛰고 다음 주기에 재시도합니다. `/`는 시간별 이슈 후보, 사건 묶음, 수집 결과와 운영 상태를 보여줍니다.
+
+## 다른 저장소의 배포 오류 구분
+
+Coolify 로그에 `/app/backend/app.py`, `uvicorn`, `BOOTSTRAP_ADMIN_EMAIL`이 나타나면 이 Node.js 모니터가 아니라 `onist_deeptrace`가 배포된 것입니다. 해당 서비스의 Python 환경 변수를 이 모니터에 추가해도 문제가 해결되지 않습니다. Coolify의 Git 저장소를 `sonbonghee/global-activity-monitor`로 지정하고 Dockerfile 빌드, 내부 포트 4000, `/app/data` 영구 저장소 및 `AUTH_PASSWORD`를 설정해 새로 배포하세요.

@@ -48,3 +48,12 @@ test('fetch timeout includes a response body that never completes',async()=>{
     await new Promise(r=>server.listen(0,'127.0.0.1',r));
     try{await assert.rejects(fetchJson('http://127.0.0.1:'+server.address().port,50));}finally{server.closeAllConnections();await new Promise(r=>server.close(r));}
 });
+test('global discovery publishes RSS preview while GDELT is still pending',async()=>{
+    db.init(':memory:');let release,entered;const waiting=new Promise(resolve=>{release=resolve});const reached=new Promise(resolve=>{entered=resolve});
+    const controller=createApp({now:()=>now,fetchNewsImpl:async()=>({items:raw,health:{success:1,failed:0}}),fetchGdeltImpl:async()=>{entered();await waiting;return {events:[],sources:[{id:'gdelt',status:'ok'}]};}});
+    try{const task=controller.runDiscovery();await reached;const preview=controller.envelope();assert.equal(preview.source,'partial');assert.equal(preview.health.sources.find(source=>source.id==='gdelt').status,'pending');assert.ok(preview.activities.length>0);release();await task;assert.equal(controller.envelope().source,'live');}finally{controller.close();db.close();}
+});
+test('GDELT cycle stops after repeated provider failures and records skipped sources',async()=>{
+    const {fetchGdelt}=require('../server');let calls=0;const result=await fetchGdelt({requestImpl:async()=>{calls++;throw new Error('network unavailable')},wait:async()=>{}});
+    assert.equal(calls,3);assert.equal(result.sources.length,14);assert.equal(result.sources.filter(source=>source.status==='skipped').length,11);
+});

@@ -30,14 +30,14 @@ const FEEDS = [
 
     // Independent / investigative
     { name: 'The Intercept', url: 'https://theintercept.com/feed/?rss' },
-    { name: 'Counterpunch', url: 'https://www.counterpunch.org/feed/' },
+    { name: 'The Guardian World', url: 'https://www.theguardian.com/world/rss' },
     { name: 'Declassified UK', url: 'https://declassifieduk.org/feed/' },
     { name: 'The Grayzone', url: 'https://thegrayzone.com/feed/' },
     { name: 'Mint Press', url: 'https://www.mintpressnews.com/feed/' },
 
     // Regional / non-Western
     { name: 'CGTN', url: 'https://www.cgtn.com/subscribe/rss/section/world.xml' },
-    { name: 'Middle East Eye', url: 'https://www.middleeasteye.net/rss' },
+    { name: 'Le Monde English', url: 'https://www.lemonde.fr/en/international/rss_full.xml' },
     { name: 'RT World', url: 'https://www.rt.com/rss/news/' },
 ];
 

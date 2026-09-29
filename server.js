@@ -47,7 +47,7 @@ async function fetchGdeltRequest(url, maxAttempts = 3) {
     let lastError;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            const data = await fetchJson(url);
+            const data = await fetchJson(url, 12000);
             return { data, attempts: attempt, responseHash: createHash('sha256').update(JSON.stringify(data)).digest('hex') };
         } catch (error) {
             lastError = error;
@@ -58,25 +58,32 @@ async function fetchGdeltRequest(url, maxAttempts = 3) {
     }
     throw lastError;
 }
-async function fetchGdelt() {
+async function fetchGdelt({ requestImpl = fetchGdeltRequest, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
     const events = [], sources = [], providerResponses = [];
     const requests = THEME_GROUPS.flatMap(theme => [{ theme, kind: 'geo' }, { theme, kind: 'doc' }]);
+    let consecutiveFailures = 0;
     for (let i = 0; i < requests.length; i++) {
         const { theme, kind } = requests[i];
         try {
             const requestUrl = kind === 'geo' ? buildGeoQuery(theme.geoQuery) : buildDocQuery(theme.docQuery);
-            const response = await fetchGdeltRequest(requestUrl);
+            const response = await requestImpl(requestUrl);
             const data = response.data;
             if (kind === 'geo' ? !Array.isArray(data.features) : !Array.isArray(data.articles)) throw new Error('Unexpected response schema');
             const parsed = kind === 'geo' ? parseGeoResponse(data,theme) : parseDocResponse(data,theme);
+            consecutiveFailures = 0;
             events.push(...parsed); sources.push({ id: `${kind}:${theme.id}`, status:'ok', count:parsed.length, attempts:response.attempts });
             providerResponses.push({ id:`${kind}:${theme.id}`, url:requestUrl, status:'ok', count:parsed.length, attempts:response.attempts, responseHash:response.responseHash });
         } catch (error) {
             const status = error.status === 429 ? 'rate-limited' : error.name === 'AbortError' ? 'timeout' : 'failed';
             sources.push({ id:`${kind}:${theme.id}`, status, error: error.message });
             providerResponses.push({ id:`${kind}:${theme.id}`, url:kind === 'geo' ? buildGeoQuery(theme.geoQuery) : buildDocQuery(theme.docQuery), status, error:error.message });
+            consecutiveFailures++;
+            if (consecutiveFailures >= 3) {
+                for (const skipped of requests.slice(i + 1)) sources.push({id:`${skipped.kind}:${skipped.theme.id}`,status:'skipped',error:'Provider unavailable in this cycle'});
+                break;
+            }
         }
-        if (i < requests.length - 1) await new Promise(resolve => setTimeout(resolve,5500));
+        if (i < requests.length - 1) await wait(5500);
     }
     return { events, sources, providerResponses };
 }
@@ -160,6 +167,15 @@ function createApp({ fetchGdeltImpl = fetchGdelt, fetchNewsImpl = fetchAllNews, 
         discovering = (async () => {
             try {
                 if (!newsFetchedAt || Date.parse(now()) - Date.parse(newsFetchedAt) >= 5 * 60000) await refreshNews();
+                if (!latest.recordedAt && news.length) {
+                    const timestamp = now();
+                    const warm = runPipeline(news,{previous:[],now:timestamp});
+                    const health = { status:'partial', sources:[{id:'rss',status:newsHealth.status},{id:'gdelt',status:'pending'}] };
+                    const alerts = advanceAlerts(warm.situations,db.getState('alertState',{}),{successful:false,now:timestamp});
+                    db.storeCycle(warm,health,alerts.state,[],timestamp);
+                    latest = {situations:warm.situations,health,recordedAt:timestamp};
+                    broadcast({type:'activities_update',...envelope()});
+                }
                 const gdelt = await fetchGdeltImpl();
                 const timestamp = now();
                 const sources = [...gdelt.sources,{ id:'rss', status:newsHealth.status === 'ok' ? 'ok' : newsHealth.status, ...newsHealth }];
@@ -241,8 +257,9 @@ async function start() {
     let topicIndex = 0;
     const collectTopic = async () => { if (!topics.length) return; try { await koreanService.run({query:topics[topicIndex++ % topics.length],window:'24h',sources:['news']}); } catch(error) { console.error('[korean]',error.message); } };
     const collectTrends = async () => { try { await koreanService.run({query:'',window:'24h',sources:['trends']}); } catch(error) { console.error('[trends]',error.message); } };
-    const timers = [setInterval(collectTopic,15*60000),setInterval(collectTrends,60*60000),setInterval(() => { db.cleanup(30); koreanService.cleanup(30); },24*60*60000)];
+    const timers = [setInterval(collectTopic,15*60000),setInterval(collectTrends,60*60000),setInterval(controller.runDiscovery,10*60000),setInterval(controller.refreshNews,5*60000),setInterval(() => { db.cleanup(30); koreanService.cleanup(30); },24*60*60000)];
     collectTopic();
+    controller.refreshNews().then(controller.runDiscovery).catch(error => console.error('[global]',error.message));
     setTimeout(collectTrends,10000).unref();
     const stop = () => { timers.forEach(clearInterval); controller.close(); server.close(() => { db.close(); process.exit(0); }); setTimeout(() => process.exit(0),5000).unref(); };
     process.once('SIGINT',stop); process.once('SIGTERM',stop);

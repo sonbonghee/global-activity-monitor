@@ -19,7 +19,7 @@
         .header-left{display:flex;align-items:center;gap:14px}
         .header-logo{width:8px;height:8px;border-radius:50%;background:var(--green-active);box-shadow:0 0 8px var(--green-glow);animation:pulse-green 2s ease-in-out infinite}
         .header-title{font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:var(--text-secondary)}
-        .header-right{display:flex;align-items:center;gap:20px}
+        .header-right{display:flex;align-items:center;gap:20px}.site-switch{background:var(--bg-card);color:var(--text-primary);border:1px solid var(--border-muted);border-radius:5px;padding:7px 9px;font:11px var(--font-sans);cursor:pointer}
         .header-stat{display:flex;align-items:center;gap:6px;font-size:10px;font-family:var(--font-mono);color:var(--text-muted)}
         .header-stat .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
         .header-stat .dot.red{background:var(--red-active);box-shadow:0 0 6px var(--red-glow)}
@@ -174,7 +174,7 @@
 <body>
     <header class="header">
         <div class="header-left"><div class="header-logo"></div><span class="header-title">Global Activity Monitor</span></div>
-        <div class="header-right">
+        <div class="header-right"><select id="siteSwitch" class="site-switch" aria-label="모니터 사이트 전환"><option value="/">한국 사이트</option><option value="/global" selected>해외 사이트</option></select>
             <div class="header-stat"><span class="dot red"></span><span class="count" id="criticalCount">0</span><span>critical</span></div>
             <div class="header-stat"><span class="dot amber"></span><span class="count" id="elevatedCount">0</span><span>elevated</span></div>
             <div class="header-stat"><span class="dot green"></span><span class="count" id="stableCount">0</span><span>stable</span></div>
@@ -191,7 +191,7 @@
         </div>
     </header>
     <nav class="monitor-controls" aria-label="Monitor filters">
-        <label>Evidence <select id="evidenceFilter"><option value="confirmed">Confirmed</option><option value="developing">Developing</option><option value="all">All reports</option></select></label>
+        <label>Evidence <select id="evidenceFilter"><option value="confirmed">Confirmed</option><option value="developing">Developing</option><option value="all" selected>All reports</option></select></label>
         <label>Category <select id="categoryFilter"><option value="all">All categories</option></select></label>
         <a href="/review">Review evidence</a><button id="enableNotifications">Enable alerts</button>
         <span id="healthSummary" role="status">Waiting for first scan</span>
@@ -241,6 +241,7 @@
     // ═══════════════════════════════════════════════════
     // GLOBALS
     // ═══════════════════════════════════════════════════
+    document.getElementById('siteSwitch').addEventListener('change',event=>{window.location.assign(event.target.value)});
     const API_BASE = window.location.origin;
     const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const WS_URL = wsProto + '//' + location.host + '/ws';
